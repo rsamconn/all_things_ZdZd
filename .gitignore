@@ -1,6 +1,9 @@
 # For MacOS
 .DS_Store
 
+# Excel spreadsheets
+*.xlsx
+
 # Prerequisites
 *.d
 

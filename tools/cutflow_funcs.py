@@ -1,0 +1,167 @@
+'''A list of functions for manipulating cutflows.
+1. Text files --> cutflow strings
+    - `parse_Scott_cutflow_file()` extracts cutflow strings in Scott's format from a file.
+    - ` parse_ZdZdPP_cutflow_file()` extracts cutflow strings in the ZdZdPostProcessing format from a file.
+2. Cutflow strings --> DFs
+    - `str_to_df_Scott()` creates a DF from a cutflow string in Scott's format.
+    - `str_to_df_ZdZdPP()` creates a DF from a cutflow string in the ZdZdPostProcessing format.
+3. Manipulating cutflow DFs
+    - `simplify_ZdZdPP_cutflow()` edits ZdZdPostProcessing DFs
+4. DF --> spreadsheet
+    - `make_spreadsheet()` converts multiple DFs to a spreadsheet of multiple sheets.
+
+Questions:
+- What is a cutflow?
+    - A cutflow is a table of cuts on a dataset, where each row is a cut that reduces (or occasionally has no effect on the number of events.)
+'''
+
+def test_func():
+    return 1.5
+
+import numpy as np
+import pandas as pd
+import re
+
+# ----------------------------------------- #
+# 1. Extracting cutflow strings from a file #
+# ----------------------------------------- #
+# Different functions are created for the different cutflow formats
+
+# 1.1 Scott's format
+def parse_Scott_cutflow_file(filepath):
+    """Look for cutflows in Scott's format in a file and extract them.
+    Header example: zd5_23a --- reco
+    Return a dictionary of 'cutflow name: cutflow string' pairs."""
+    # Open file and extract lines
+    with open(filepath, 'r') as f:
+        content = f.read()
+    lines = content.split('\n')
+    
+    cutflow_dict = {}
+    current_key = None
+    current_lines = []    
+    for line in lines:
+        # Check if this line is a header (contains " --- ")
+        if ' --- ' in line and not line.startswith('|'):
+            # Save the previous cutflow if it exists
+            if current_key is not None:
+                cutflow_dict[current_key] = '\n'.join(current_lines).strip()
+            # Start a new cutflow
+            current_key = line.strip()
+            current_lines = []
+        else:
+            # Add line to current cutflow
+            current_lines.append(line)
+    # Don't forget to save the last cutflow
+    if current_key is not None:
+        cutflow_dict[current_key] = '\n'.join(current_lines).strip()
+    
+    return cutflow_dict
+
+# 1.2 ZdZdPostProcessing format
+def parse_ZdZdPP_cutflow_file(filepath):
+    """Look for cutflows in the ZdZdPostProcessing format in a file and extract them.
+    Header example: mc23a_zd5
+    Return a dictionary of 'cutflow header: cutflow string' pairs."""
+    # Open file and extract lines
+    with open(filepath, 'r') as f:
+        content = f.read()
+    lines = content.split('\n')
+    
+    cutflow_dict = {}
+    current_key = None
+    current_lines = []
+    for line in lines:
+        # Check if this line is a header (doesn't start with | or -)
+        # and is not empty
+        if line.strip() and not line.startswith('|') and not line.startswith('-'):
+            # Save the previous cutflow if it exists
+            if current_key is not None:
+                cutflow_dict[current_key] = '\n'.join(current_lines).strip()
+            # Start a new cutflow
+            current_key = line.strip()
+            current_lines = []
+        else:
+            # Add line to current cutflow
+            current_lines.append(line)
+    # Don't forget to save the last cutflow
+    if current_key is not None:
+        cutflow_dict[current_key] = '\n'.join(current_lines).strip()
+    
+    return cutflow_dict
+
+# ------------------------------------------- #
+# 2. Converting cutflow strings to DataFrames #
+# ------------------------------------------- #
+# Different functions are created for the different cutflow formats
+
+# 2.2 Scott's format
+def str_to_df_Scott(cutflow_str):
+    '''Create a DF from a string of a cutflow table in Scott's format.'''
+    lines = cutflow_str.strip().split('\n')
+    data = []
+    for line in lines[2:]:  # Skip the first two header lines
+        parts = line.split('|')[1:-1]  # Split by '|' and ignore empty parts
+        row = [part.strip() for part in parts]
+        data.append(row)
+    columns = ['Cut', 'N4e', 'Wt4e', 'Nem', 'Wtem', 'N4m', 'Wt4m', 'N all', 'Wt all']
+    df = pd.DataFrame(data, columns=columns)
+    return df
+
+# 2.2 ZdZdPostProcessing format
+def str_to_df_ZdZdPP(cutflow_str):
+    '''Create a DF from a string of a cutflow table in the ZdZdPostProcessing format.'''
+    lines = [line.strip() for line in cutflow_str.strip().split('\n') if line.strip() and not line.strip().startswith('-')]
+    # Parse header
+    header_parts = re.findall(r'\|([^|]+)', lines[0])
+    header = ['Cuts'] + [col.strip() for col in header_parts[1:]]
+    # Parse data rows
+    data = []
+    for line in lines[1:]:
+        cols = [col.strip() for col in re.findall(r'\|([^|]+)', line)]
+        data.append(cols)
+    df = pd.DataFrame(data, columns=header)
+    
+    # Split columns (except 'Cuts') into weights and events
+    new_cols = {}
+    new_cols['Cuts'] = df['Cuts']
+    for col in df.columns[1:]:
+        # Extract float (weight) and integer (events)
+        weights = df[col].str.extract(r'([0-9.]+)\s*\(')[0].astype(float)
+        events = df[col].str.extract(r'\(([0-9]+)\)')[0].astype(int)
+        
+        new_cols[f'{col}_weights'] = weights
+        new_cols[f'{col}_events'] = events
+    
+    return pd.DataFrame(new_cols)
+
+# ---------------------------------- #
+# 3. Manipulating cutflow dataframes #
+# ---------------------------------- #
+
+def simplify_ZdZdPP_cutflow(df):
+    # Drop columns with 'weights' in the name
+    df_simplified = df.copy().loc[:, ~df.columns.str.contains('weights')]
+    # Create 'all' column
+    df_simplified['all'] = df_simplified.iloc[:, 1:].sum(axis=1)
+    # Drop the 2nd column (which is the first 'events' column)
+    df_simplified = df_simplified.drop(columns=[df_simplified.columns[1]])
+    # Rename remaining columns
+    df_simplified.columns = ['Cut', '4e', '2e2m', '4m', 'all']
+    
+    return df_simplified
+
+# ------------------------------------------------------ #
+# 4. Making spreadsheet from multiple cutflow DataFrames #
+# ------------------------------------------------------ #
+
+def make_spreadsheet(outfile, table_dict):
+    '''Take in a filename and a dictionary with format: {sheet_name: table_df}
+    Save as an excel file with each table in its own sheet.'''
+    with pd.ExcelWriter(outfile) as writer:
+        for sheet_name, table_df in table_dict.items():
+            df = table_df
+            df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+# Example use:
+# make_spreadsheet('my_out_file.xlsx', {'my sheet': str_to_df(my_cutflow_str), })
