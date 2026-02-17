@@ -16,7 +16,7 @@ Questions:
 '''
 
 def test_func():
-    return 1.5
+    return 1.9
 
 import numpy as np
 import pandas as pd
@@ -139,17 +139,32 @@ def str_to_df_ZdZdPP(cutflow_str):
 # 3. Manipulating cutflow dataframes #
 # ---------------------------------- #
 
-def simplify_ZdZdPP_cutflow(df):
-    # Drop columns with 'weights' in the name
-    df_simplified = df.copy().loc[:, ~df.columns.str.contains('weights')]
-    # Create 'all' column
-    df_simplified['all'] = df_simplified.iloc[:, 1:].sum(axis=1)
-    # Drop the 2nd column (which is the first 'events' column)
-    df_simplified = df_simplified.drop(columns=[df_simplified.columns[1]])
-    # Rename remaining columns
-    df_simplified.columns = ['Cut', '4e', '2e2m', '4m', 'all']
+def simplify_ZdZdPP_cutflow(df, drop=None):
+    # Make a column which contains the sum of each column that has 'events' in the name, for each row. This will be the 'all' column.
+    df['weights_All'] = df.loc[:, df.columns.str.contains('weights')].sum(axis=1)
+    df['events_All'] = df.loc[:, df.columns.str.contains('events')].sum(axis=1)
+    # Drop the 2nd and 3rd columns (which are the first 'events' and 'weights' columns)
+    df_simplified = df.copy().drop(columns=[df.columns[2]])
+    df_simplified = df_simplified.copy().drop(columns=[df_simplified.columns[1]])
+    # Rename columns to 4e, 2e2m, 4m
+    new_columns = []
+    for col in df_simplified.columns:
+        if col.split('_')[0][-1] == '1':
+            new_columns.append(f'{col.split("_")[1]}_4e')
+        elif col.split('_')[0][-1] == '2':
+            new_columns.append(f'{col.split("_")[1]}_2e2m')
+        elif col.split('_')[0][-1] == '3':
+            new_columns.append(f'{col.split("_")[1]}_4m')
+        else:
+            new_columns.append(col)
+    df_simplified.columns = new_columns
+    # Optional: drop columns containing a certain word (e.g. 'weights')
+    if drop is not None:
+        df_simplified = df_simplified.drop(columns=[col for col in df_simplified.columns if drop in col])
     
     return df_simplified
+
+# def rename_cols_ZdZdPP(df):
 
 # ------------------------------------------------------ #
 # 4. Making spreadsheet from multiple cutflow DataFrames #
