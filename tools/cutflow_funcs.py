@@ -16,7 +16,7 @@ Questions:
 '''
 
 def test_func():
-    return 1.9
+    return 2.1
 
 import numpy as np
 import pandas as pd
@@ -104,8 +104,11 @@ def str_to_df_Scott(cutflow_str):
         parts = line.split('|')[1:-1]  # Split by '|' and ignore empty parts
         row = [part.strip() for part in parts]
         data.append(row)
-    columns = ['Cut', 'N4e', 'Wt4e', 'Nem', 'Wtem', 'N4m', 'Wt4m', 'N all', 'Wt all']
+    columns = ['Cut', 'events_4e', 'weights_4e', 'events_2e2m', 'weights_2e2m', 'events_4m', 'weights_4m', 'events_All', 'weights_All']
     df = pd.DataFrame(data, columns=columns)
+    # Reorder columns
+    new_col_order = ['Cut', 'weights_4e', 'events_4e', 'weights_2e2m', 'events_2e2m', 'weights_4m', 'events_4m', 'weights_All', 'events_All']
+    df = df[new_col_order]
     return df
 
 # 2.2 ZdZdPostProcessing format
@@ -138,6 +141,17 @@ def str_to_df_ZdZdPP(cutflow_str):
 # ---------------------------------- #
 # 3. Manipulating cutflow dataframes #
 # ---------------------------------- #
+
+def simplify_Scott_cutflow(df):
+    # Find the index of the row where the value of 'Cut' is '*AS SR1*'
+    index = df[df['Cut'] == '*AS SR1*'].index
+    # Keep only the rows up to and including that index
+    df = df.loc[:index[0]]
+    # Remove rows where 'Cut' contains certain values
+    simplified_df = df[~df['Cut'].str.contains('overlap|jetclean|tight|\*', case=False, regex=True)]\
+        .reset_index(drop=True, inplace=False)#[new_col_order]
+
+    return simplified_df
 
 def simplify_ZdZdPP_cutflow(df, drop=None):
     # Make a column which contains the sum of each column that has 'events' in the name, for each row. This will be the 'all' column.
