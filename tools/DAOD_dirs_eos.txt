@@ -1,0 +1,16 @@
+mc23a
+Base directory:
+/eos/atlas/atlascerngroupdisk/phys-hmbs/hlrs/ZdZd/DAOD_PHYS_HZdZd4l/mc23a/
+
+Sub directories;
+mc23_13p6TeV.561504.MGPy8EG_ZdZd_4l_Signal_mS125_mZd5.deriv.DAOD_PHYS.e8589_a910_r15540_p6491
+mc23_13p6TeV.561508.MGPy8EG_ZdZd_4l_Signal_mS125_mZd15.deriv.DAOD_PHYS.e8589_a910_r15540_p6491
+mc23_13p6TeV.561511.MGPy8EG_ZdZd_4l_Signal_mS125_mZd30.deriv.DAOD_PHYS.e8589_a910_r15540_p6491
+mc23_13p6TeV.561514.MGPy8EG_ZdZd_4l_Signal_mS125_mZd45.deriv.DAOD_PHYS.e8589_a910_r15540_p6491
+mc23_13p6TeV.561517.MGPy8EG_ZdZd_4l_Signal_mS125_mZd60.deriv.DAOD_PHYS.e8589_a910_r15540_p6491
+
+mc23d
+/eos/atlas/atlascerngroupdisk/phys-hmbs/hlrs/ZdZd/DAOD_PHYS_HZdZd4l/mc23d/mc23_13p6TeV.561511.MGPy8EG_ZdZd_4l_Signal_mS125_mZd30.deriv.DAOD_PHYS.e8589_a911_r15530_p6491/*
+
+mc23e
+/eos/atlas/atlascerngroupdisk/phys-hmbs/hlrs/ZdZd/DAOD_PHYS_HZdZd4l/mc23e/mc23_13p6TeV.561511.MGPy8EG_ZdZd_4l_Signal_mS125_mZd30.deriv.DAOD_PHYS.e8589_a934_r16083_p6522/*
