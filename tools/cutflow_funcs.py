@@ -16,10 +16,12 @@ Questions:
 '''
 
 def test_func():
-    return 2.1
+    return 2.2
 
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 import re
 
 # ----------------------------------------- #
@@ -194,3 +196,39 @@ def make_spreadsheet(outfile, table_dict):
 
 # Example use:
 # make_spreadsheet('my_out_file.xlsx', {'my sheet': str_to_df(my_cutflow_str), })
+
+# ------------------------------------------------------ #
+# 5. Plot multiple cutflows as a horizontal bar char     #
+# ------------------------------------------------------ #
+def cutflow_barchart(df, value_columns, title, ylabel,
+                     x_col='Cut name', palette='viridis',
+                     savename=None):
+    '''Reformat a cutflow DataFrame and create a bar chart comparing the specified value columns across cuts.'''
+    
+    # First, reformat the cutflow DataFrame to a long format suitable for seaborn
+    df_long = df[[x_col] + value_columns].melt(id_vars=x_col,
+                                               value_vars=value_columns,
+                                               var_name='Channel',
+                                               value_name='Value')
+    df_long['Value'] = df_long['Value'].astype(float) #Make sure the Value column is numeric
+    
+    # Second, create the bar chart using seaborn
+    plt.figure(figsize=(12, 6))
+    sns.barplot(data=df_long,
+                x=x_col, y='Value', hue='Channel', palette=palette)
+    plt.xticks(rotation=90)
+    plt.title('Cutflow Comparison: weighted events')
+    # Use bbox to add a legend outside the plot
+    # plt.legend(title='Channel', bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.legend(title=title, loc='upper right')
+    plt.ylabel(ylabel, fontsize=12, loc='top')
+    plt.xlabel(x_col, fontsize=12, loc='right')
+    plt.grid(True, axis='y', linestyle='--', alpha=0.7)
+    plt.tight_layout()
+
+    # If there is a savename, save the plot
+    if savename is not None:
+        print(f'Saving as {savename}.')
+        plt.savefig(savename)
+    else:
+        print("No savename provided, not saving the plot.") 
