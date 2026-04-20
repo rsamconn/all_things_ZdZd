@@ -2,6 +2,7 @@
 1. Text files --> cutflow strings
     - `parse_Scott_cutflow_file()` extracts cutflow strings in Scott's format from a file.
     - ` parse_ZdZdPP_cutflow_file()` extracts cutflow strings in the ZdZdPostProcessing format from a file.
+    - `filter_lines_by_word()` extracts the lines containing a specific word - useful for collecting debugging statements.
 2. Cutflow strings --> DFs
     - `str_to_df_Scott()` creates a DF from a cutflow string in Scott's format.
     - `str_to_df_ZdZdPP()` creates a DF from a cutflow string in the ZdZdPostProcessing format.
@@ -9,6 +10,8 @@
     - `simplify_ZdZdPP_cutflow()` edits ZdZdPostProcessing DFs
 4. DF --> spreadsheet
     - `make_spreadsheet()` converts multiple DFs to a spreadsheet of multiple sheets.
+5. DF --> cutflow chart
+    - `cutflow_barchart()` plots multiple cutflows on a horizontal bar chart.
 
 Questions:
 - What is a cutflow?
@@ -16,7 +19,7 @@ Questions:
 '''
 
 def test_func():
-    return 2.2
+    return 2.4
 
 import numpy as np
 import pandas as pd
@@ -92,6 +95,15 @@ def parse_ZdZdPP_cutflow_file(filepath):
     
     return cutflow_dict
 
+# 1.3 Get debugging lines
+def filter_lines_by_word(file_path: str, word: str) -> str:
+    '''Return a multiline string of only the lines which containing a certain word.'''
+    with open(file_path, 'r') as f:
+        file_str = f.read()
+    lines = file_str.splitlines()
+    filtered_lines = [line for line in lines if word in line]
+    return '\n'.join(filtered_lines)
+
 # ------------------------------------------- #
 # 2. Converting cutflow strings to DataFrames #
 # ------------------------------------------- #
@@ -145,10 +157,11 @@ def str_to_df_ZdZdPP(cutflow_str):
 # ---------------------------------- #
 
 def simplify_Scott_cutflow(df):
-    # Find the index of the row where the value of 'Cut' is '*AS SR1*'
-    index = df[df['Cut'] == '*AS SR1*'].index
-    # Keep only the rows up to and including that index
-    df = df.loc[:index[0]]
+    # If AS cuts are in the table, find and remove them
+    if '*AS SR1*' in df['Cut']:
+        index = df[df['Cut'] == '*AS SR1*'].index
+        # Keep only the rows up to and including that index
+        df = df.loc[:index[0]]
     # Remove rows where 'Cut' contains certain values
     simplified_df = df[~df['Cut'].str.contains('overlap|jetclean|tight|\*', case=False, regex=True)]\
         .reset_index(drop=True, inplace=False)#[new_col_order]
