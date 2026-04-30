@@ -1,31 +1,46 @@
 #!/usr/bin/env python3
 """
-Aggregate cutflow tables from many ZdZdPostProcessing log files into a
-single output file.
+This script aggregates cutflow tables from many ZdZdPostProcessing log files into a single output file.
 
-Input
+Input - file list
 -----
-A plain-text file (the *list file*) with one log-file path per line.
-Blank lines and lines whose first non-whitespace character is ``#`` are
-ignored, so lines can be commented out with ``#``.
+A plain-text file (*list_path*) with one log-file path per line (blank lines and lines commented out with ``#`` are ignored).
 
-Output
+Each log file is expected to contain a cutflow table in the format produced by ZdZdPostProcessing, along with a line naming the input ROOT file.
+
+The sample ID for each cutflow is taken as the directory immediately above the ROOT file in that path.
+
+Output - cutflow list
 ------
-A single text file containing, for each input log:
+A single text file containing a sample ID and cutflow table for each input log.
 
-    <sample identifier>
-    <cutflow table>
-    <blank line>
-    <sample identifier>
-    <cutflow table>
-    ...
-
-A warning is printed to stderr if any sample identifier appears more
-than once across the inputs.
+Example cutflow block in the output file:
+-------------------------------------------
+The first line is the sample ID, followed by the cutflow table (only some cuts shown here - ZdZdPostprocessing typically has ~20 cuts).
+`
+mc23a_mZd5_p6697
+|               |#==561504           |#==5615041        |#==5615042        |#==5615043        |
+-----------------------------------------------------------------------------------------------
+|All            |23162.109375 (23158)|0.000000 (0)      |0.000000 (0)      |0.000000 (0)      |
+|Cleaning       |23162.109375 (23158)|0.000000 (0)      |0.000000 (0)      |0.000000 (0)      |
+...
+|HWindow        |0.000000 (0)        |45.348930 (49)    |490.486542 (519)  |891.753357 (952)  |
+|ZVeto          |0.000000 (0)        |25.357410 (28)    |490.486542 (519)  |477.725403 (510)  |
+-----------------------------------------------------------------------------------------------
+`
 
 Usage
 -----
     python aggregate_cutflows.py <list_file> [-o OUTPUT]
+
+Member functions
+----------------
+1. `agcf_version()` - Returns the version string for this script.
+2. `extract_cutflow()` - Returns a tuple of the extracted cutflow table lines and a sample ID from an input ZdZdPostProcessing log file.
+3. `read_filelist()` - Returns the list of paths from *list_path*.
+4. `aggregate_cutflows()` - Calls `read_filelist()` and `extract_cutflow()` to read and extract cutflows and sample IDs to an output file.
+5. `_warn_on_duplicates()` - Prints a warning to stderr for duplicate sample IDs.
+6. `_parse_args()` - Parses command-line arguments and returns a namespace with the parsed values.
 """
 
 from __future__ import annotations
@@ -37,6 +52,10 @@ import re
 from pathlib import Path
 from typing import List, Optional, Pattern, Tuple, Union
 
+def agcf_version() -> str:
+    """Version string for this script."""
+    return "1.0"
+
 def _as_pattern(p: Union[str, Pattern[str]]) -> Pattern[str]:
     """Compile *p* if it is a string, otherwise return it unchanged."""
     return re.compile(p) if isinstance(p, str) else p
@@ -44,21 +63,16 @@ def _as_pattern(p: Union[str, Pattern[str]]) -> Pattern[str]:
 
 def extract_cutflow(
     filepath: str | Path,
-    processing_re: Union[str, Pattern[str]] = re.compile(r"Processing\s+(\S+\.root)\b"),
+    sampleID_re: Union[str, Pattern[str]] = re.compile(r"Processing\s+(\S+\.root)\b"),
     header_marker: str = '#==',
     sep_re: Union[str, Pattern[str]] = re.compile(r"^-{3,}\s*$"),
 ) -> Tuple[Optional[str], Optional[List[str]]]:
     """
-    Extract the cutflow table lines from an input ZdZdPostProcessing log file, along with a sample ID.
-    Optionally set the table header and separator pattern, as well as the patter for locating the sample ID.
-        processing_re : str or compiled regex, optional
-        Regex used to locate the line that names the input ROOT file.  Its
-        first capture group must be the full path to the ``*.root`` file;
-        the sample identifier is taken as the directory immediately above
-        that file.  Defaults to :data:`DEFAULT_PROCESSING_RE`.
+    Extract the cutflow table lines and sample ID from an input ZdZdPostProcessing log file.
+    Optionally set the table header, separator and sample-ID-locator patterns.
     """
-    processing_re = _as_pattern(processing_re)
-    sep_re = _as_pattern(sep_re)
+    sampleID_re = _as_pattern(sampleID_re) #Regex for locating the sample ID line.
+    sep_re = _as_pattern(sep_re) #Regex for locating the cutflow table separator lines (dashed lines).
 
     sample_id: Optional[str] = None
     cutflow_lines: Optional[List[str]] = None
@@ -70,9 +84,9 @@ def extract_cutflow(
         for raw in fh:
             line = raw.rstrip("\n")
 
-            # --- sample identifier ---------------------------------------
+            # --- sample ID ---------------------------------------
             if sample_id is None:
-                m = processing_re.search(line)
+                m = sampleID_re.search(line)
                 if m:
                     parts = m.group(1).split("/")
                     if len(parts) >= 2:
@@ -115,14 +129,9 @@ def read_filelist(list_path: Union[str, Path]) -> List[Path]:
     return paths
 
 
-def aggregate_cutflows(
-    list_path: Union[str, Path],
-    output_path: Union[str, Path],
-) -> int:
+def aggregate_cutflows(list_path: Union[str, Path], output_path: Union[str, Path]) -> int:
     """
-    Read the file list at *list_path*, extract the cutflow from each
-    referenced log file, and write everything to *output_path*.
-
+    Aggregate extracted cutflow & sampled IDs from files in *list_path* to *output_path*.
     Returns the number of cutflows written.
     """
     files = read_filelist(list_path)
@@ -135,51 +144,55 @@ def aggregate_cutflows(
             print(f"WARNING: file not found, skipping: {f}", file=sys.stderr)
             continue
 
-        sid, cf = extract_cutflow(f)
+        sID, cf = extract_cutflow(f)
 
+        # Warnings if sample ID or cutflow are missing
         if cf is None:
             print(f"WARNING: no cutflow table in {f}, skipping",
                   file=sys.stderr)
             continue
-        if sid is None:
-            print(f"WARNING: no sample identifier in {f}; "
+        if sID is None:
+            print(f"WARNING: no sample ID in {f}; "
                   f"using '<unknown:{f.name}>'", file=sys.stderr)
-            sid = f"<unknown:{f.name}>"
+            sID = f"<unknown:{f.name}>"
 
-        blocks.append((sid, cf, f))
+        blocks.append((sID, cf, f))
 
+    # Warn if duplicate sample ID occurs (but still write all to output)
     _warn_on_duplicates(blocks)
 
     with open(output_path, "w", encoding="utf-8") as out:
-        for i, (sid, cf, _src) in enumerate(blocks):
+        for i, (sID, cf, _src) in enumerate(blocks):
             if i > 0:
                 out.write("\n")  # blank line between blocks
-            out.write(sid + "\n")
+            out.write(sID + "\n")
             out.write("\n".join(cf) + "\n")
 
     print(f"Wrote {len(blocks)} cutflow(s) to {output_path}")
     return len(blocks)
 
 
-def _warn_on_duplicates(
-    blocks: List[Tuple[str, List[str], Path]],
-) -> None:
-    """Print a warning to stderr for any sample identifier seen >1 time."""
-    counts = Counter(sid for sid, _, _ in blocks)
+def _warn_on_duplicates(blocks: List[Tuple[str, List[str], Path]]) -> None:
+    """Print a warning to stderr for any sample ID seen >1 time."""
+
+    # Create dictionary of duplicate sample IDs and their counts
+    counts = Counter(sID for sID, _, _ in blocks)
     dups = {s: n for s, n in counts.items() if n > 1}
     if not dups:
         return
 
+    # Get the file corresponding to each duplicate sample ID
     sources = defaultdict(list)
-    for sid, _, src in blocks:
-        if sid in dups:
-            sources[sid].append(src)
+    for sID, _, src in blocks:
+        if sID in dups:
+            sources[sID].append(src)
 
-    print("WARNING: duplicate sample identifier(s) detected:",
+    # Print warnings for each sample ID and corresponding files
+    print("WARNING: duplicate sample ID(s) detected:",
           file=sys.stderr)
-    for sid, n in dups.items():
-        print(f"  '{sid}' appears {n} times in:", file=sys.stderr)
-        for src in sources[sid]:
+    for sID, n in dups.items():
+        print(f"  '{sID}' appears {n} times in the file:", file=sys.stderr)
+        for src in sources[sID]:
             print(f"    - {src}", file=sys.stderr)
 
 
@@ -189,12 +202,12 @@ def _parse_args(argv: List[str]) -> argparse.Namespace:
     )
     p.add_argument(
         "list_file",
-        help="text file with one log-file path per line ('#' for comments)",
+        help="text file with one log-file path per line",
     )
     p.add_argument(
         "-o", "--output",
         default="cutflows.txt",
-        help="output file (default: cutflows.txt)",
+        help="output file to contain list of sample IDs and cutflow tables (default: cutflows.txt)",
     )
     return p.parse_args(argv)
 

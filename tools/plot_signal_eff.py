@@ -19,12 +19,21 @@ indices supported).
 from __future__ import annotations
 
 import re
-from typing import Callable, Dict, List, Optional, Union
+from contextlib import nullcontext
+from typing import Any, Callable, Dict, List, Mapping, Optional, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+
+# Defaults used when ``atlas_style=True`` is passed to plot_signal_efficiency.
+DEFAULT_ATLAS_LABEL_KWARGS: Dict[str, Any] = {
+    "text": "Internal",      # ATLAS sub-label (was 'label' in older mplhep)
+    "data": False,              # MC-only plot -> "Simulation"
+    "com": 13.6,                # Run 3 centre-of-mass energy [TeV]
+    "rlabel": "Run 3 simulation",
+}
 
 # A cut can be referred to by its label in the 'Cuts' column or by its
 # integer position in the DataFrame.
@@ -126,8 +135,11 @@ def plot_signal_efficiency(
     denominator_cut: Optional[CutRef] = None,
     mzd_func: Callable[[str], Optional[float]] = default_mzd_from_sample_id,
     ax: Optional[plt.Axes] = None,
+    figsize: Optional[tuple] = None,
     marker: str = "o",
     errorbar=None,
+    atlas_style: bool = False,
+    atlas_label_kwargs: Optional[Mapping[str, Any]] = None,
     **lineplot_kwargs,
 ) -> plt.Axes:
     """
@@ -143,11 +155,23 @@ def plot_signal_efficiency(
         See :func:`compute_signal_efficiency`.
     ax : matplotlib.axes.Axes, optional
         Existing axes to draw on.  A new figure/axes is created if omitted.
+    figsize : tuple, optional
+        Figure size used when a new figure is created.  Defaults to
+        ``(8, 6)`` if ``atlas_style=True`` and ``(7, 5)`` otherwise.
     marker : str, optional
         Marker style passed to seaborn (default ``'o'``).
     errorbar : seaborn errorbar spec, optional
         Defaults to ``None`` (no error band) since cutflow efficiencies
         are point estimates per sample.  Pass e.g. ``'ci'`` to enable.
+    atlas_style : bool, optional
+        If ``True``, apply the ATLAS matplotlib style (via :mod:`mplhep`)
+        for this plot only and overlay the official ATLAS label.  Requires
+        ``mplhep`` to be installed (``pip install mplhep``).  Default ``False``.
+    atlas_label_kwargs : mapping, optional
+        Overrides for the kwargs passed to ``mplhep.atlas.label``.  Merged
+        on top of :data:`DEFAULT_ATLAS_LABEL_KWARGS`
+        (``text='Internal', data=False, com=13.6,
+        rlabel='Run 3 simulation'``).  Only used when ``atlas_style=True``.
     **lineplot_kwargs
         Forwarded to :func:`seaborn.lineplot`.
     """
@@ -166,28 +190,56 @@ def plot_signal_efficiency(
             "that the requested channels exist in the cutflow DataFrames."
         )
 
-    if ax is None:
-        _, ax = plt.subplots(figsize=(7, 5))
+    # Resolve ATLAS-style context (scoped via plt.style.context so we don't
+    # mutate global rcParams for the rest of the user's session).
+    hep = None
+    if atlas_style:
+        try:
+            import mplhep as hep  # noqa: F811  (local import is intentional)
+        except ImportError as exc:  # pragma: no cover - import guard
+            raise ImportError(
+                "atlas_style=True requires the 'mplhep' package. "
+                "Install it with `pip install mplhep`."
+            ) from exc
+        style_ctx = plt.style.context(hep.style.ATLAS)
+    else:
+        style_ctx = nullcontext()
 
-    sns.lineplot(
-        data=eff_df,
-        x="mZd",
-        y="efficiency",
-        hue="channel",
-        marker=marker,
-        errorbar=errorbar,
-        ax=ax,
-        **lineplot_kwargs,
-    )
+    # Merge ATLAS label kwargs on top of the defaults.
+    label_kwargs = dict(DEFAULT_ATLAS_LABEL_KWARGS)
+    if atlas_label_kwargs:
+        label_kwargs.update(atlas_label_kwargs)
 
-    # Human-readable labels for the ratio used.
-    num_label = "last cut" if numerator_cut is None else str(numerator_cut)
-    den_label = "first cut" if denominator_cut is None else str(denominator_cut)
+    with style_ctx:
+        if ax is None:
+            if figsize is None:
+                figsize = (8, 6) if atlas_style else (7, 5)
+            _, ax = plt.subplots(figsize=figsize)
 
-    ax.set_xlabel(r"$m_{Z_d}$ [GeV]")
-    ax.set_ylabel(f"Signal efficiency [%]  ({num_label} / {den_label})")
-    ax.set_title(r"Signal efficiency vs. $m_{Z_d}$")
-    ax.legend(title="channel")
-    ax.grid(True, alpha=0.3)
+        sns.lineplot(
+            data=eff_df,
+            x="mZd",
+            y="efficiency",
+            hue="channel",
+            marker=marker,
+            errorbar=errorbar,
+            ax=ax,
+            **lineplot_kwargs,
+        )
+
+        # Human-readable labels for the ratio used.
+        num_label = "last cut" if numerator_cut is None else str(numerator_cut)
+        den_label = "first cut" if denominator_cut is None else str(denominator_cut)
+
+        ax.set_xlabel(r"$m_{Z_d}$ [GeV]")
+        ax.set_ylabel(f"Signal efficiency [%]  ({num_label} / {den_label})")
+        ax.legend(title="channel")
+        ax.grid(True, alpha=0.3)
+
+        if atlas_style:
+            # ATLAS label takes the role of a title; skip ax.set_title().
+            hep.atlas.label(ax=ax, **label_kwargs)
+        else:
+            ax.set_title(r"Signal efficiency vs. $m_{Z_d}$")
 
     return ax
